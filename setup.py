@@ -244,9 +244,9 @@ if KEEP_CUDA_BUILD:
             ),
         }
 
-    # Use stable ABI version for PyTorch >= 2.10
+    # Use stable ABI version for PyTorch >= 2.10 (CUDA only; not yet verified on HIP/ROCm)
     torch_version = parse(torch.__version__)
-    use_stable = torch_version >= Version("2.10.0a0")
+    use_stable = torch_version >= Version("2.10.0a0") and not HIP_BUILD
     if use_stable:
         selective_scan_source = "csrc/selective_scan/selective_scan_stable.cpp"
         extra_compile_args["cxx"] = ["-O3", "-std=c++20"]
