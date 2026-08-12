@@ -244,11 +244,20 @@ if KEEP_CUDA_BUILD:
             ),
         }
 
+    # Use stable ABI version for PyTorch >= 2.10
+    torch_version = parse(torch.__version__)
+    use_stable = torch_version >= Version("2.10.0a0")
+    if use_stable:
+        selective_scan_source = "csrc/selective_scan/selective_scan_stable.cpp"
+        extra_compile_args["cxx"] = ["-O3", "-std=c++20"]
+    else:
+        selective_scan_source = "csrc/selective_scan/selective_scan.cpp"
+
     ext_modules.append(
         CUDAExtension(
             name="selective_scan_cuda",
             sources=[
-                "csrc/selective_scan/selective_scan.cpp",
+                selective_scan_source,
                 "csrc/selective_scan/selective_scan_fwd_fp32.cu",
                 "csrc/selective_scan/selective_scan_fwd_fp16.cu",
                 "csrc/selective_scan/selective_scan_fwd_bf16.cu",
