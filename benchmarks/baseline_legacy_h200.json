@@ -1,0 +1,122 @@
+[
+  {
+    "config": "small-fp32",
+    "batch": 2,
+    "dim": 64,
+    "seqlen": 1024,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.float32",
+    "e2e_ms": 0.1568,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "small-fp16",
+    "batch": 2,
+    "dim": 64,
+    "seqlen": 1024,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.float16",
+    "e2e_ms": 0.1698,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "small-bf16",
+    "batch": 2,
+    "dim": 64,
+    "seqlen": 1024,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.bfloat16",
+    "e2e_ms": 0.1729,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "med-fp32",
+    "batch": 4,
+    "dim": 256,
+    "seqlen": 2048,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.float32",
+    "e2e_ms": 0.3424,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "med-fp16",
+    "batch": 4,
+    "dim": 256,
+    "seqlen": 2048,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.float16",
+    "e2e_ms": 0.2613,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "med-bf16",
+    "batch": 4,
+    "dim": 256,
+    "seqlen": 2048,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.bfloat16",
+    "e2e_ms": 0.2682,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "large-fp16",
+    "batch": 8,
+    "dim": 768,
+    "seqlen": 4096,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.float16",
+    "e2e_ms": 2.2609,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "large-bf16",
+    "batch": 8,
+    "dim": 768,
+    "seqlen": 4096,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.bfloat16",
+    "e2e_ms": 2.3019,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "xlarge-bf16",
+    "batch": 16,
+    "dim": 1024,
+    "seqlen": 4096,
+    "dstate": 16,
+    "n_groups": 1,
+    "dtype": "torch.bfloat16",
+    "e2e_ms": 5.8732,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  },
+  {
+    "config": "groups-bf16",
+    "batch": 4,
+    "dim": 256,
+    "seqlen": 2048,
+    "dstate": 16,
+    "n_groups": 4,
+    "dtype": "torch.bfloat16",
+    "e2e_ms": 0.2675,
+    "gpu": "NVIDIA H200",
+    "pytorch": "2.14.0a0+git526b9ce"
+  }
+]

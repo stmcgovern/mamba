@@ -18,25 +18,18 @@ except ImportError:
 from mamba_ssm.ops.triton.layer_norm import _layer_norm_fwd
 
 selective_scan_cuda = None
-_use_stable_ops = False
+_selective_scan_fwd = None
+_selective_scan_bwd = None
 try:
     import selective_scan_cuda  # noqa: F811
     if hasattr(torch.ops, "selective_scan") and hasattr(torch.ops.selective_scan, "fwd"):
-        _use_stable_ops = True
+        _selective_scan_fwd = torch.ops.selective_scan.fwd
+        _selective_scan_bwd = torch.ops.selective_scan.bwd
+    else:
+        _selective_scan_fwd = selective_scan_cuda.fwd
+        _selective_scan_bwd = selective_scan_cuda.bwd
 except ImportError:
     pass
-
-
-def _selective_scan_fwd(*args, **kwargs):
-    if _use_stable_ops:
-        return torch.ops.selective_scan.fwd(*args, **kwargs)
-    return selective_scan_cuda.fwd(*args, **kwargs)
-
-
-def _selective_scan_bwd(*args, **kwargs):
-    if _use_stable_ops:
-        return torch.ops.selective_scan.bwd(*args, **kwargs)
-    return selective_scan_cuda.bwd(*args, **kwargs)
 
 
 def _check_selective_scan_cuda():
