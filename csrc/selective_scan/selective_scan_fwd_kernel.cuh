@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include <c10/util/BFloat16.h>
-#include <c10/util/Half.h>
-#include <c10/cuda/CUDAException.h>  // For C10_CUDA_CHECK and C10_CUDA_KERNEL_LAUNCH_CHECK
+#include <torch/headeronly/util/BFloat16.h>
+#include <torch/headeronly/util/Half.h>
+#include <torch/csrc/stable/macros.h>
 
 #ifndef USE_ROCM
     #include <cub/block/block_load.cuh>
@@ -330,17 +330,17 @@ void selective_scan_fwd_launch(SSMParamsBase &params, cudaStream_t stream) {
                     
                     if (kSmemSize >= 48 * 1024) {
                         #ifndef USE_ROCM
-                        C10_CUDA_CHECK(cudaFuncSetAttribute(
+                        STD_CUDA_CHECK(cudaFuncSetAttribute(
                             kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, kSmemSize));
                         #else
-                        C10_CUDA_CHECK(cudaFuncSetAttribute(
+                        STD_CUDA_CHECK(cudaFuncSetAttribute(
                             (void *) kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, kSmemSize));
                             std::cerr << "Warning (selective_scan_fwd_kernel): attempting to set maxDynamicSharedMemorySize on an AMD GPU which is currently a non-op (in ROCm versions <= 6.1). This might lead to undefined behavior. \n" << std::endl;
                         #endif
                     }
 
                     kernel<<<grid, Ktraits::kNThreads, kSmemSize, stream>>>(params);
-                    C10_CUDA_KERNEL_LAUNCH_CHECK();
+                    STD_CUDA_KERNEL_LAUNCH_CHECK();
                 });
             });
         });

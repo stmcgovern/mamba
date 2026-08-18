@@ -14,7 +14,10 @@ import torch.nn as nn
 from mamba_ssm.models.config_mamba import MambaConfig
 from mamba_ssm.modules.mamba_simple import Mamba
 from mamba_ssm.modules.mamba2 import Mamba2
-from mamba_ssm.modules.mamba3 import Mamba3
+try:
+    from mamba_ssm.modules.mamba3 import Mamba3
+except Exception:
+    Mamba3 = None
 from mamba_ssm.modules.mha import MHA
 from mamba_ssm.modules.mlp import GatedMLP
 from mamba_ssm.modules.block import Block
