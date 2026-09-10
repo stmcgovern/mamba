@@ -43,6 +43,15 @@ KEEP_CUDA_BUILD = os.getenv("MAMBA_KEEP_CUDA_BUILD", "FALSE") == "TRUE"
 # For CI, we want the option to build with C++11 ABI since the nvcr images use C++11 ABI
 FORCE_CXX11_ABI = os.getenv("MAMBA_FORCE_CXX11_ABI", "FALSE") == "TRUE"
 
+# Oldest torch whose stable ABI provides everything csrc/selective_scan uses.
+# torch::stable::accelerator::Stream::nativeHandle() landed in 2.13; every other
+# stable/headeronly API in these sources is available from 2.10.
+# Targeting this version explicitly pins the extension to that shim set, so a
+# wheel built against a newer torch stays loadable on 2.13. Without the flag,
+# TORCH_FEATURE_VERSION silently defaults to the build machine's TORCH_ABI_VERSION.
+TORCH_STABLE_ABI_MIN = (2, 13)
+TORCH_TARGET_VERSION = "0x{:02X}{:02X}000000000000".format(*TORCH_STABLE_ABI_MIN)
+
 
 def get_platform():
     """
@@ -210,11 +219,13 @@ if KEEP_CUDA_BUILD:
     if HIP_BUILD:
 
         extra_compile_args = {
-            "cxx": ["-O3", "-std=c++17", "-DTORCH_STABLE_ONLY"],
+            "cxx": ["-O3", "-std=c++17", "-DTORCH_STABLE_ONLY",
+                    f"-DTORCH_TARGET_VERSION={TORCH_TARGET_VERSION}"],
             "nvcc": [
                 "-O3",
                 "-std=c++17",
                 "-DUSE_CUDA",
+                f"-DTORCH_TARGET_VERSION={TORCH_TARGET_VERSION}",
                 f"--offload-arch={os.getenv('HIP_ARCHITECTURES', 'native')}",
                 "-U__CUDA_NO_HALF_OPERATORS__",
                 "-U__CUDA_NO_HALF_CONVERSIONS__",
@@ -224,12 +235,14 @@ if KEEP_CUDA_BUILD:
         }
     else:
         extra_compile_args = {
-            "cxx": ["-O3", "-std=c++17", "-DTORCH_STABLE_ONLY"],
+            "cxx": ["-O3", "-std=c++17", "-DTORCH_STABLE_ONLY",
+                    f"-DTORCH_TARGET_VERSION={TORCH_TARGET_VERSION}"],
             "nvcc": append_nvcc_threads(
                 [
                     "-O3",
                     "-std=c++17",
                     "-DUSE_CUDA",
+                    f"-DTORCH_TARGET_VERSION={TORCH_TARGET_VERSION}",
                     "-U__CUDA_NO_HALF_OPERATORS__",
                     "-U__CUDA_NO_HALF_CONVERSIONS__",
                     "-U__CUDA_NO_BFLOAT16_OPERATORS__",
@@ -396,7 +409,7 @@ setup(
     },
     python_requires=">=3.10",
     install_requires=[
-        "torch",
+        "torch>=2.13",
         "packaging",
         "ninja",
         "einops",
