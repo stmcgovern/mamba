@@ -210,10 +210,11 @@ if KEEP_CUDA_BUILD:
     if HIP_BUILD:
 
         extra_compile_args = {
-            "cxx": ["-O3", "-std=c++17"],
+            "cxx": ["-O3", "-std=c++17", "-DTORCH_STABLE_ONLY"],
             "nvcc": [
                 "-O3",
                 "-std=c++17",
+                "-DUSE_CUDA",
                 f"--offload-arch={os.getenv('HIP_ARCHITECTURES', 'native')}",
                 "-U__CUDA_NO_HALF_OPERATORS__",
                 "-U__CUDA_NO_HALF_CONVERSIONS__",
@@ -223,11 +224,12 @@ if KEEP_CUDA_BUILD:
         }
     else:
         extra_compile_args = {
-            "cxx": ["-O3", "-std=c++17"],
+            "cxx": ["-O3", "-std=c++17", "-DTORCH_STABLE_ONLY"],
             "nvcc": append_nvcc_threads(
                 [
                     "-O3",
                     "-std=c++17",
+                    "-DUSE_CUDA",
                     "-U__CUDA_NO_HALF_OPERATORS__",
                     "-U__CUDA_NO_HALF_CONVERSIONS__",
                     "-U__CUDA_NO_BFLOAT16_OPERATORS__",
@@ -260,6 +262,7 @@ if KEEP_CUDA_BUILD:
                 "csrc/selective_scan/selective_scan_bwd_bf16_complex.cu",
             ],
             extra_compile_args=extra_compile_args,
+            extra_link_args=["-Wl,--as-needed"],
             include_dirs=[Path(this_dir) / "csrc" / "selective_scan"],
         )
     )

@@ -4,10 +4,20 @@
 
 #pragma once
 
-#include <c10/util/BFloat16.h>
-#include <c10/util/Half.h>
-#include <c10/cuda/CUDAException.h>  // For C10_CUDA_CHECK and C10_CUDA_KERNEL_LAUNCH_CHECK
-#include <ATen/cuda/Atomic.cuh>  // For atomicAdd on complex
+#include <torch/headeronly/util/BFloat16.h>
+#include <torch/headeronly/util/Half.h>
+#include <torch/headeronly/util/complex.h>
+#include <torch/csrc/stable/macros.h>
+
+// gpuAtomicAdd for float and complex<float>, replacing ATen/cuda/Atomic.cuh
+inline __device__ float gpuAtomicAdd(float *address, float val) {
+    return atomicAdd(address, val);
+}
+template <typename T>
+inline __device__ void gpuAtomicAdd(c10::complex<T> *address, c10::complex<T> val) {
+    gpuAtomicAdd(&address->real_, val.real_);
+    gpuAtomicAdd(&address->imag_, val.imag_);
+}
 
 #ifndef USE_ROCM
     #include <cub/block/block_load.cuh>
@@ -26,7 +36,7 @@
 
 template<typename scalar_t> __device__ __forceinline__ scalar_t conj(scalar_t x);
 template<> __device__ __forceinline__ float conj<float>(float x) { return x; }
-template<> __device__ __forceinline__ complex_t conj<complex_t>(complex_t x) { return std::conj(x); }
+template<> __device__ __forceinline__ complex_t conj<complex_t>(complex_t x) { return complex_t(x.real_, -x.imag_); }
 
 template<int kNThreads_, int kNItems_, bool kIsEvenLen_, bool kIsVariableB_, bool kIsVariableC_,
          bool kDeltaSoftplus_, bool kHasZ_, typename input_t_, typename weight_t_>
@@ -513,10 +523,10 @@ void selective_scan_bwd_launch(SSMParamsBwd &params, cudaStream_t stream) {
                         if (kSmemSize >= 48 * 1024) {
 
                             #ifndef USE_ROCM
-                            C10_CUDA_CHECK(cudaFuncSetAttribute(
+                            STD_CUDA_CHECK(cudaFuncSetAttribute(
                                 kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, kSmemSize));
                             #else
-                            C10_CUDA_CHECK(cudaFuncSetAttribute(
+                            STD_CUDA_CHECK(cudaFuncSetAttribute(
                                 (void *) kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, kSmemSize));
                             std::cerr << "Warning (selective_scan_bwd_kernel): attempting to set maxDynamicSharedMemorySize on an AMD GPU which is currently a non-op (in ROCm versions <= 6.1). This might lead to undefined behavior. \n" << std::endl;
                             #endif
@@ -524,7 +534,7 @@ void selective_scan_bwd_launch(SSMParamsBwd &params, cudaStream_t stream) {
                         }
 
                         kernel<<<grid, Ktraits::kNThreads, kSmemSize, stream>>>(params);
-                        C10_CUDA_KERNEL_LAUNCH_CHECK();
+                        STD_CUDA_KERNEL_LAUNCH_CHECK();
                     });
                 });
             });
