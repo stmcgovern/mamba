@@ -12,6 +12,11 @@
 #include <cuda_fp16.h>
 #include <torch/headeronly/util/complex.h>
 
+// <c10/util/complex.h> used to pull these in transitively; the headeronly
+// replacement does not, and custom_max/constexpr_min below need them.
+#include <algorithm>
+#include <initializer_list>
+
 
 #ifndef USE_ROCM
 
@@ -40,7 +45,7 @@
 
 #define MAX_DSTATE 256
 
-using complex_t = c10::complex<float>;
+using complex_t = torch::headeronly::complex<float>;
 
 inline __device__ float2 operator+(const float2 & a, const float2 & b){
     return {a.x + b.x, a.y + b.y};
@@ -94,8 +99,8 @@ struct Converter{
 };
 
 template<int N>
-struct Converter<c10::Half, N>{
-    static inline __device__ void to_float(const c10::Half (&src)[N], float (&dst)[N]) {
+struct Converter<torch::headeronly::Half, N>{
+    static inline __device__ void to_float(const torch::headeronly::Half (&src)[N], float (&dst)[N]) {
         static_assert(N % 2 == 0);
         auto &src2 = reinterpret_cast<const half2 (&)[N / 2]>(src);
         auto &dst2 = reinterpret_cast<float2 (&)[N / 2]>(dst);
@@ -106,8 +111,8 @@ struct Converter<c10::Half, N>{
 
 #if __CUDA_ARCH__ >= 800
 template<int N>
-struct Converter<c10::BFloat16, N>{
-    static inline __device__ void to_float(const c10::BFloat16 (&src)[N], float (&dst)[N]) {
+struct Converter<torch::headeronly::BFloat16, N>{
+    static inline __device__ void to_float(const torch::headeronly::BFloat16 (&src)[N], float (&dst)[N]) {
         static_assert(N % 2 == 0);
         auto &src2 = reinterpret_cast<const nv_bfloat162 (&)[N / 2]>(src);
         auto &dst2 = reinterpret_cast<float2 (&)[N / 2]>(dst);

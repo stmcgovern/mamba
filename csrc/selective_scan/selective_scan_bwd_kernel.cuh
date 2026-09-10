@@ -14,7 +14,7 @@ inline __device__ float gpuAtomicAdd(float *address, float val) {
     return atomicAdd(address, val);
 }
 template <typename T>
-inline __device__ void gpuAtomicAdd(c10::complex<T> *address, c10::complex<T> val) {
+inline __device__ void gpuAtomicAdd(torch::headeronly::complex<T> *address, torch::headeronly::complex<T> val) {
     gpuAtomicAdd(&address->real_, val.real_);
     gpuAtomicAdd(&address->imag_, val.imag_);
 }

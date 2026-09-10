@@ -3,14 +3,17 @@
  ******************************************************************************/
 
 #include <Python.h>
+#include <torch/csrc/inductor/aoti_torch/c/shim.h>
 #include <torch/csrc/stable/tensor.h>
 #include <torch/csrc/stable/ops.h>
 #include <torch/csrc/stable/accelerator.h>
 #include <torch/csrc/stable/library.h>
+#include <torch/csrc/stable/version.h>
 #include <torch/headeronly/core/ScalarType.h>
 #include <torch/headeronly/util/Half.h>
 #include <torch/headeronly/util/BFloat16.h>
 #include <torch/headeronly/util/complex.h>
+#include <torch/headeronly/util/shim_utils.h>
 #include <cuda_runtime.h>
 #include <vector>
 
@@ -18,9 +21,17 @@
 
 using torch::stable::Tensor;
 
+// The current CUDA stream comes from the AOTInductor C shim rather than
+// torch::stable::accelerator::Stream::nativeHandle(), which is only declared
+// from torch 2.13 onwards. This is the same class of stable C entry point that
+// torch/csrc/stable/accelerator.h is itself built on, and it keeps the ABI
+// floor for these sources at 2.10. Same approach as vLLM's
+// csrc/libtorch_stable/torch_utils.h.
 static inline cudaStream_t get_cuda_stream(int32_t device_index) {
-    return (cudaStream_t)torch::stable::accelerator::getCurrentStream(
-        device_index).nativeHandle();
+    void *stream = nullptr;
+    TORCH_ERROR_CODE_CHECK(
+        aoti_torch_get_current_cuda_stream(device_index, &stream));
+    return reinterpret_cast<cudaStream_t>(stream);
 }
 
 #define CHECK_SHAPE(x, ...) STD_TORCH_CHECK(x.sizes() == torch::headeronly::IntHeaderOnlyArrayRef({__VA_ARGS__}), #x " must have shape (" #__VA_ARGS__ ")")
@@ -37,6 +48,20 @@ static inline cudaStream_t get_cuda_stream(int32_t device_index) {
         __VA_ARGS__();                                                               \
     } else {                                                                         \
         STD_TORCH_CHECK(false, #NAME, " not implemented for input type '", toString(ITYPE), "'"); \
+    }
+
+#define DISPATCH_WTYPE_FLOAT_AND_HALF_AND_BF16(WTYPE, NAME, ...)                     \
+    if (WTYPE == torch::headeronly::ScalarType::Half) {                               \
+        using weight_t = torch::headeronly::Half;                                     \
+        __VA_ARGS__();                                                                \
+    } else if (WTYPE == torch::headeronly::ScalarType::BFloat16) {                    \
+        using weight_t = torch::headeronly::BFloat16;                                 \
+        __VA_ARGS__();                                                                \
+    } else if (WTYPE == torch::headeronly::ScalarType::Float)  {                      \
+        using weight_t = float;                                                       \
+        __VA_ARGS__();                                                                \
+    } else {                                                                          \
+        STD_TORCH_CHECK(false, #NAME, " not implemented for weight type '", toString(WTYPE), "'"); \
     }
 
 #define DISPATCH_WTYPE_FLOAT_AND_COMPLEX(WTYPE, NAME, ...)                           \
@@ -277,9 +302,8 @@ selective_scan_fwd(const Tensor &u, const Tensor &delta,
         STD_TORCH_CHECK(C.stride(-1) == 1 || C.size(-1) == 1);
     }
 
-    Tensor D, delta_bias;
     if (D_.has_value()) {
-        D = D_.value();
+        auto D = D_.value();
         STD_TORCH_CHECK(D.scalar_type() == torch::headeronly::ScalarType::Float);
         STD_TORCH_CHECK(D.is_cuda());
         STD_TORCH_CHECK(D.stride(-1) == 1 || D.size(-1) == 1);
@@ -287,7 +311,7 @@ selective_scan_fwd(const Tensor &u, const Tensor &delta,
     }
 
     if (delta_bias_.has_value()) {
-        delta_bias = delta_bias_.value();
+        auto delta_bias = delta_bias_.value();
         STD_TORCH_CHECK(delta_bias.scalar_type() == torch::headeronly::ScalarType::Float);
         STD_TORCH_CHECK(delta_bias.is_cuda());
         STD_TORCH_CHECK(delta_bias.stride(-1) == 1 || delta_bias.size(-1) == 1);
@@ -306,19 +330,23 @@ selective_scan_fwd(const Tensor &u, const Tensor &delta,
     }
 
     const int n_chunks = (seqlen + 2048 - 1) / 2048;
+    // const int n_chunks = (seqlen + 1024 - 1) / 1024;
+    // Tensor out = torch::stable::empty_like(u);
+    // Right now u has BHL layout and delta has HBL layout, and we want out to have HBL layout
     Tensor out = torch::stable::empty_like(delta);
     Tensor x = torch::stable::new_empty(u, {batch_size, dim, n_chunks, dstate * 2}, weight_type);
 
     SSMParamsBase params;
     set_ssm_params_fwd(params, batch_size, dim, seqlen, dstate, n_groups, n_chunks, is_variable_B, is_variable_C,
                        u, delta, A, B, C, out, z, out_z,
-                       D_.has_value() ? D.data_ptr() : nullptr,
-                       delta_bias_.has_value() ? delta_bias.data_ptr() : nullptr,
+                       D_.has_value() ? D_.value().data_ptr() : nullptr,
+                       delta_bias_.has_value() ? delta_bias_.value().data_ptr() : nullptr,
                        x.data_ptr(),
                        has_z,
                        delta_softplus);
 
     // Otherwise the kernel will be launched from cuda:0 device
+    // Cast to char to avoid compiler warning about narrowing
     const torch::stable::accelerator::DeviceGuard device_guard(u.get_device_index());
     auto stream = get_cuda_stream(u.get_device_index());
     DISPATCH_ITYPE_FLOAT_AND_HALF_AND_BF16(u.scalar_type(), "selective_scan_fwd", [&] {
@@ -394,9 +422,8 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
     }
     CHECK_SHAPE(dout, batch_size, dim, seqlen);
 
-    Tensor D, delta_bias;
     if (D_.has_value()) {
-        D = D_.value();
+        auto D = D_.value();
         STD_TORCH_CHECK(D.scalar_type() == torch::headeronly::ScalarType::Float);
         STD_TORCH_CHECK(D.is_cuda());
         STD_TORCH_CHECK(D.stride(-1) == 1 || D.size(-1) == 1);
@@ -404,7 +431,7 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
     }
 
     if (delta_bias_.has_value()) {
-        delta_bias = delta_bias_.value();
+        auto delta_bias = delta_bias_.value();
         STD_TORCH_CHECK(delta_bias.scalar_type() == torch::headeronly::ScalarType::Float);
         STD_TORCH_CHECK(delta_bias.is_cuda());
         STD_TORCH_CHECK(delta_bias.stride(-1) == 1 || delta_bias.size(-1) == 1);
@@ -442,10 +469,10 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
     }
 
     const int n_chunks = (seqlen + 2048 - 1) / 2048;
-    Tensor x;
+    // const int n_chunks = (seqlen + 1024 - 1) / 1024;
     if (n_chunks > 1) { STD_TORCH_CHECK(x_.has_value()); }
     if (x_.has_value()) {
-        x = x_.value();
+        auto x = x_.value();
         STD_TORCH_CHECK(x.scalar_type() == weight_type);
         STD_TORCH_CHECK(x.is_cuda());
         STD_TORCH_CHECK(x.is_contiguous());
@@ -458,22 +485,23 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
     Tensor dB = !is_variable_B ? torch::stable::new_zeros(B, B.sizes()) : torch::stable::new_zeros(B, B.sizes(), torch::headeronly::ScalarType::Float);
     Tensor dC = !is_variable_C ? torch::stable::new_zeros(C, C.sizes()) : torch::stable::new_zeros(C, C.sizes(), torch::headeronly::ScalarType::Float);
     Tensor dD;
-    if (D_.has_value()) { dD = torch::stable::new_zeros(D, D.sizes()); }
+    if (D_.has_value()) { dD = torch::stable::new_zeros(D_.value(), D_.value().sizes()); }
     Tensor ddelta_bias;
-    if (delta_bias_.has_value()) { ddelta_bias = torch::stable::new_zeros(delta_bias, delta_bias.sizes()); }
+    if (delta_bias_.has_value()) { ddelta_bias = torch::stable::new_zeros(delta_bias_.value(), delta_bias_.value().sizes()); }
 
     SSMParamsBwd params;
     set_ssm_params_bwd(params, batch_size, dim, seqlen, dstate, n_groups, n_chunks, is_variable_B, is_variable_C,
                        u, delta, A, B, C, z, out, out_z,
-                       D_.has_value() ? D.data_ptr() : nullptr,
-                       delta_bias_.has_value() ? delta_bias.data_ptr() : nullptr,
-                       x_.has_value() ? x.data_ptr() : nullptr,
+                       D_.has_value() ? D_.value().data_ptr() : nullptr,
+                       delta_bias_.has_value() ? delta_bias_.value().data_ptr() : nullptr,
+                       x_.has_value() ? x_.value().data_ptr() : nullptr,
                        dout, du, ddelta, dA, dB, dC, dz,
                        D_.has_value() ? dD.data_ptr() : nullptr,
                        delta_bias_.has_value() ? ddelta_bias.data_ptr() : nullptr,
                        has_z, delta_softplus, recompute_out_z);
 
     // Otherwise the kernel will be launched from cuda:0 device
+    // Cast to char to avoid compiler warning about narrowing
     const torch::stable::accelerator::DeviceGuard device_guard(u.get_device_index());
     auto stream = get_cuda_stream(u.get_device_index());
     DISPATCH_ITYPE_FLOAT_AND_HALF_AND_BF16(u.scalar_type(), "selective_scan_bwd", [&] {
