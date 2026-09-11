@@ -34,7 +34,22 @@ static inline cudaStream_t get_cuda_stream(int32_t device_index) {
     return reinterpret_cast<cudaStream_t>(stream);
 }
 
-#define CHECK_SHAPE(x, ...) STD_TORCH_CHECK(x.sizes() == torch::headeronly::IntHeaderOnlyArrayRef({__VA_ARGS__}), #x " must have shape (" #__VA_ARGS__ ")")
+// torch::stable has no zeros_like. ATen implements zeros_like as
+// empty_like(memory_format=preserve) followed by zero_, and both halves are
+// available here, so compose them to keep the layout-preserving behaviour that
+// new_zeros does not have.
+static inline Tensor zeros_like_stable(
+        const Tensor &self,
+        std::optional<torch::headeronly::ScalarType> dtype = std::nullopt) {
+    Tensor result = torch::stable::empty_like(self);
+    torch::stable::zero_(result);
+    if (dtype.has_value() && dtype.value() != self.scalar_type()) {
+        result = torch::stable::to(result, dtype.value());
+    }
+    return result;
+}
+
+#define CHECK_SHAPE(x, ...) STD_TORCH_CHECK(x.sizes().equals(torch::headeronly::IntHeaderOnlyArrayRef({__VA_ARGS__})), #x " must have shape (" #__VA_ARGS__ ")")
 
 #define DISPATCH_ITYPE_FLOAT_AND_HALF_AND_BF16(ITYPE, NAME, ...)                    \
     if (ITYPE == torch::headeronly::ScalarType::Half) {                              \
@@ -481,13 +496,13 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
 
     Tensor du = torch::stable::empty_like(u);
     Tensor ddelta = torch::stable::empty_like(delta);
-    Tensor dA = torch::stable::new_zeros(A, A.sizes());
-    Tensor dB = !is_variable_B ? torch::stable::new_zeros(B, B.sizes()) : torch::stable::new_zeros(B, B.sizes(), torch::headeronly::ScalarType::Float);
-    Tensor dC = !is_variable_C ? torch::stable::new_zeros(C, C.sizes()) : torch::stable::new_zeros(C, C.sizes(), torch::headeronly::ScalarType::Float);
+    Tensor dA = zeros_like_stable(A);
+    Tensor dB = !is_variable_B ? zeros_like_stable(B) : zeros_like_stable(B, torch::headeronly::ScalarType::Float);
+    Tensor dC = !is_variable_C ? zeros_like_stable(C) : zeros_like_stable(C, torch::headeronly::ScalarType::Float);
     Tensor dD;
-    if (D_.has_value()) { dD = torch::stable::new_zeros(D_.value(), D_.value().sizes()); }
+    if (D_.has_value()) { dD = zeros_like_stable(D_.value()); }
     Tensor ddelta_bias;
-    if (delta_bias_.has_value()) { ddelta_bias = torch::stable::new_zeros(delta_bias_.value(), delta_bias_.value().sizes()); }
+    if (delta_bias_.has_value()) { ddelta_bias = zeros_like_stable(delta_bias_.value()); }
 
     SSMParamsBwd params;
     set_ssm_params_bwd(params, batch_size, dim, seqlen, dstate, n_groups, n_chunks, is_variable_B, is_variable_C,
