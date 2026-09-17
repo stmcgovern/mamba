@@ -536,9 +536,13 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
 STABLE_TORCH_LIBRARY(selective_scan, m) {
     m.def("fwd(Tensor u, Tensor delta, Tensor A, Tensor B, Tensor C, "
           "Tensor? D, Tensor? z, Tensor? delta_bias, bool delta_softplus) -> Tensor[]");
+    // dz is an in/out buffer: when the caller supplies one the bwd kernel writes
+    // through it (store_output in selective_scan_bwd_kernel.cuh), so it is
+    // annotated as mutated. It stays optional -- selective_scan_fn passes None
+    // and lets this function allocate it.
     m.def("bwd(Tensor u, Tensor delta, Tensor A, Tensor B, Tensor C, "
           "Tensor? D, Tensor? z, Tensor? delta_bias, Tensor dout, "
-          "Tensor? x, Tensor? out, Tensor? dz, "
+          "Tensor? x, Tensor? out, Tensor(dz!)? dz, "
           "bool delta_softplus, bool recompute_out_z) -> Tensor[]");
 }
 
