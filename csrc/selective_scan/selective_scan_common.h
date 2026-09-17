@@ -181,7 +181,7 @@ template <typename scalar_t> struct SSMScanPrefixCallbackOp {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<typename Ktraits>
-inline __device__ void load_input(typename Ktraits::input_t *u,
+inline __device__ void load_input(const typename Ktraits::input_t *u,
                                   typename Ktraits::input_t (&u_vals)[Ktraits::kNItems],
                                   typename Ktraits::BlockLoadT::TempStorage &smem_load,
                                   int seqlen) {
@@ -189,7 +189,7 @@ inline __device__ void load_input(typename Ktraits::input_t *u,
         auto& smem_load_vec = reinterpret_cast<typename Ktraits::BlockLoadVecT::TempStorage&>(smem_load);
         using vec_t = typename Ktraits::vec_t;
         typename Ktraits::BlockLoadVecT(smem_load_vec).Load(
-            reinterpret_cast<vec_t*>(u),
+            reinterpret_cast<const vec_t*>(u),
             reinterpret_cast<vec_t(&)[Ktraits::kNLoads]>(u_vals)
             #ifdef USE_ROCM
                 , Ktraits::kNThreads * Ktraits::kNLoads
@@ -202,7 +202,7 @@ inline __device__ void load_input(typename Ktraits::input_t *u,
 }
 
 template<typename Ktraits>
-inline __device__ void load_weight(typename Ktraits::input_t *Bvar,
+inline __device__ void load_weight(const typename Ktraits::input_t *Bvar,
                                    typename Ktraits::weight_t (&B_vals)[Ktraits::kNItems],
                                    typename Ktraits::BlockLoadWeightT::TempStorage &smem_load_weight,
                                    int seqlen) {
@@ -213,7 +213,7 @@ inline __device__ void load_weight(typename Ktraits::input_t *Bvar,
             auto& smem_load_weight_vec = reinterpret_cast<typename Ktraits::BlockLoadWeightVecT::TempStorage&>(smem_load_weight);
             using vec_t = typename Ktraits::vec_t;
             typename Ktraits::BlockLoadWeightVecT(smem_load_weight_vec).Load(
-                reinterpret_cast<vec_t*>(Bvar),
+                reinterpret_cast<const vec_t*>(Bvar),
                 reinterpret_cast<vec_t(&)[Ktraits::kNLoads]>(B_vals_load)
           );
         } else {
@@ -228,7 +228,7 @@ inline __device__ void load_weight(typename Ktraits::input_t *Bvar,
             auto& smem_load_weight_vec = reinterpret_cast<typename Ktraits::BlockLoadWeightVecT::TempStorage&>(smem_load_weight);
             using vec_t = typename Ktraits::vec_t;
             typename Ktraits::BlockLoadWeightVecT(smem_load_weight_vec).Load(
-                reinterpret_cast<vec_t*>(Bvar),
+                reinterpret_cast<const vec_t*>(Bvar),
                 reinterpret_cast<vec_t(&)[Ktraits::kNLoads * 2]>(B_vals_load)
           );
         } else {

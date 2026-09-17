@@ -115,8 +115,8 @@ void set_ssm_params_fwd(SSMParamsBase &params,
                         const Tensor &out,
                         const Tensor &z,
                         const Tensor &out_z,
-                        void* D_ptr,
-                        void* delta_bias_ptr,
+                        const void* D_ptr,
+                        const void* delta_bias_ptr,
                         void* x_ptr,
                         bool has_z,
                         bool delta_softplus) {
@@ -137,18 +137,21 @@ void set_ssm_params_fwd(SSMParamsBase &params,
     params.is_variable_B = is_variable_B;
     params.is_variable_C = is_variable_C;
 
+    // Set the pointers and strides. out_ptr and x_ptr stay non-const: fwd writes
+    // them and bwd reads them, and both share SSMParamsBase, so there is no one
+    // constness correct for both. Everything else is read-only in both.
     // Set the pointers and strides.
-    params.u_ptr = u.data_ptr();
-    params.delta_ptr = delta.data_ptr();
-    params.A_ptr = A.data_ptr();
-    params.B_ptr = B.data_ptr();
-    params.C_ptr = C.data_ptr();
+    params.u_ptr = u.const_data_ptr();
+    params.delta_ptr = delta.const_data_ptr();
+    params.A_ptr = A.const_data_ptr();
+    params.B_ptr = B.const_data_ptr();
+    params.C_ptr = C.const_data_ptr();
     params.D_ptr = D_ptr;
     params.delta_bias_ptr = delta_bias_ptr;
-    params.out_ptr = out.data_ptr();
+    params.out_ptr = out.mutable_data_ptr();
     params.x_ptr = x_ptr;
-    params.z_ptr = has_z ? z.data_ptr() : nullptr;
-    params.out_z_ptr = has_z ? out_z.data_ptr() : nullptr;
+    params.z_ptr = has_z ? z.const_data_ptr() : nullptr;
+    params.out_z_ptr = has_z ? out_z.mutable_data_ptr() : nullptr;
     // All stride are in elements, not bytes.
     params.A_d_stride = A.stride(0);
     params.A_dstate_stride = A.stride(1);
@@ -199,8 +202,8 @@ void set_ssm_params_bwd(SSMParamsBwd &params,
                         const Tensor &z,
                         const Tensor &out,
                         const Tensor &out_z,
-                        void* D_ptr,
-                        void* delta_bias_ptr,
+                        const void* D_ptr,
+                        const void* delta_bias_ptr,
                         void* x_ptr,
                         const Tensor &dout,
                         const Tensor &du,
@@ -225,15 +228,15 @@ void set_ssm_params_bwd(SSMParamsBwd &params,
     if (!recompute_out_z) { params.out_z_ptr = nullptr; }
 
     // Set the pointers and strides.
-    params.dout_ptr = dout.data_ptr();
-    params.du_ptr = du.data_ptr();
-    params.dA_ptr = dA.data_ptr();
-    params.dB_ptr = dB.data_ptr();
-    params.dC_ptr = dC.data_ptr();
+    params.dout_ptr = dout.const_data_ptr();
+    params.du_ptr = du.mutable_data_ptr();
+    params.dA_ptr = dA.mutable_data_ptr();
+    params.dB_ptr = dB.mutable_data_ptr();
+    params.dC_ptr = dC.mutable_data_ptr();
     params.dD_ptr = dD_ptr;
-    params.ddelta_ptr = ddelta.data_ptr();
+    params.ddelta_ptr = ddelta.mutable_data_ptr();
     params.ddelta_bias_ptr = ddelta_bias_ptr;
-    params.dz_ptr = has_z ? dz.data_ptr() : nullptr;
+    params.dz_ptr = has_z ? dz.mutable_data_ptr() : nullptr;
     // All stride are in elements, not bytes.
     params.dout_batch_stride = dout.stride(0);
     params.dout_d_stride = dout.stride(1);
@@ -354,9 +357,9 @@ selective_scan_fwd(const Tensor &u, const Tensor &delta,
     SSMParamsBase params;
     set_ssm_params_fwd(params, batch_size, dim, seqlen, dstate, n_groups, n_chunks, is_variable_B, is_variable_C,
                        u, delta, A, B, C, out, z, out_z,
-                       D_.has_value() ? D_.value().data_ptr() : nullptr,
-                       delta_bias_.has_value() ? delta_bias_.value().data_ptr() : nullptr,
-                       x.data_ptr(),
+                       D_.has_value() ? D_.value().const_data_ptr() : nullptr,
+                       delta_bias_.has_value() ? delta_bias_.value().const_data_ptr() : nullptr,
+                       x.mutable_data_ptr(),
                        has_z,
                        delta_softplus);
 
@@ -507,12 +510,12 @@ selective_scan_bwd(const Tensor &u, const Tensor &delta,
     SSMParamsBwd params;
     set_ssm_params_bwd(params, batch_size, dim, seqlen, dstate, n_groups, n_chunks, is_variable_B, is_variable_C,
                        u, delta, A, B, C, z, out, out_z,
-                       D_.has_value() ? D_.value().data_ptr() : nullptr,
-                       delta_bias_.has_value() ? delta_bias_.value().data_ptr() : nullptr,
-                       x_.has_value() ? x_.value().data_ptr() : nullptr,
+                       D_.has_value() ? D_.value().const_data_ptr() : nullptr,
+                       delta_bias_.has_value() ? delta_bias_.value().const_data_ptr() : nullptr,
+                       x_.has_value() ? x_.value().mutable_data_ptr() : nullptr,
                        dout, du, ddelta, dA, dB, dC, dz,
-                       D_.has_value() ? dD.data_ptr() : nullptr,
-                       delta_bias_.has_value() ? ddelta_bias.data_ptr() : nullptr,
+                       D_.has_value() ? dD.mutable_data_ptr() : nullptr,
+                       delta_bias_.has_value() ? ddelta_bias.mutable_data_ptr() : nullptr,
                        has_z, delta_softplus, recompute_out_z);
 
     // Otherwise the kernel will be launched from cuda:0 device
